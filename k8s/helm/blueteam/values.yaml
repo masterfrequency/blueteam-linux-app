@@ -1,0 +1,63 @@
+replicaCount: 3
+
+image:
+  repository: blueteam
+  tag: "2.0.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8000
+  metricsPort: 9090
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+database:
+  host: postgres.blueteam.svc.cluster.local
+  port: 5432
+  name: blueteam
+  ssl: true
+
+redis:
+  host: redis.blueteam.svc.cluster.local
+  port: 6379
+
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    interval: 30s
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: blueteam.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: blueteam-tls
+      hosts:
+        - blueteam.example.com
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

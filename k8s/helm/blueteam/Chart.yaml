@@ -1,0 +1,14 @@
+apiVersion: v2
+name: blueteam
+description: BlueTeam Enterprise Security Platform Helm Chart
+type: application
+version: 2.0.0
+appVersion: "2.0.0"
+keywords:
+  - security
+  - threat-detection
+  - incident-response
+  - compliance
+maintainers:
+  - name: BlueTeam Team
+    email: team@blueteam.io
