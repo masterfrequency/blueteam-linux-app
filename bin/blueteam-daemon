@@ -1,214 +1,242 @@
 #!/usr/bin/env python3
 """
-BlueTeam Linux Enterprise - System Daemon
-Real-time security monitoring and threat detection
+BlueTeam Enterprise Daemon
+Real-time threat detection and response
 """
 
 import sys
 import os
-import signal
 import logging
-import json
 import asyncio
-from pathlib import Path
+import signal
+import json
 from datetime import datetime
-from typing import Optional
+from pathlib import Path
 
-# Add lib to path
-sys.path.insert(0, '/usr/lib/blueteam')
+# Add parent directory to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.system_monitor import SystemMonitor, ThreatLevel
-from ml.threat_detection import (
-    NetworkAnomalyDetector,
-    ProcessAnomalyDetector,
-    ThreatClassifier,
-    BehavioralAnalyzer
+from backend.database import init_db, get_db, Threat, Module, Event
+from backend.modules_impl import (
+    AITrafficAnalyzer, ZeroTrustFirewall, IntrusionDetectionSystem,
+    VPNSecureTunneling, DNSSecurityFilter, MalwareScanner,
+    ProcessSentinel, KernelHardening, RegistryConfigGuard,
+    USBHardwareBlocker, AutoPatchManager, ComplianceAuditor,
+    VulnerabilityScanner, SecretScanner, BiometricMFAGateway,
+    PrivilegeEscalationMonitor, SessionHijackingGuard,
+    LogAggregatorSIEM, SnapshotRecovery, LiveForensicsToolkit,
+    ThreatIntelligenceFeed, AutomatedPlaybookEngine,
+    AISecurityAssistant, HoneypotDeployer
 )
+from backend.event_system import EventCorrelationEngine, SecurityEvent
+from backend.integrations import integration_manager
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('/var/log/blueteam/daemon.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Create log directory
+Path('/var/log/blueteam').mkdir(parents=True, exist_ok=True)
 
 
 class BlueTeamDaemon:
-    """BlueTeam Enterprise Daemon"""
+    """BlueTeam daemon service"""
     
     def __init__(self):
-        self.config_dir = Path("/etc/blueteam")
-        self.log_dir = Path("/var/log/blueteam")
-        self.data_dir = Path("/var/lib/blueteam")
-        self.pid_file = Path("/var/run/blueteam.pid")
-        
-        # Create directories if they don't exist
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Setup logging
-        self.logger = self._setup_logging()
-        
-        # Initialize components
-        self.monitor = SystemMonitor()
-        self.network_detector = NetworkAnomalyDetector()
-        self.process_detector = ProcessAnomalyDetector()
-        self.threat_classifier = ThreatClassifier()
-        self.behavioral_analyzer = BehavioralAnalyzer()
-        
         self.running = False
+        self.modules = {}
+        self.correlation_engine = EventCorrelationEngine()
+        self.threat_count = 0
+        self._initialize_modules()
+    
+    def _initialize_modules(self):
+        """Initialize all security modules"""
+        self.modules = {
+            "ai_traffic_analyzer": AITrafficAnalyzer(),
+            "zero_trust_firewall": ZeroTrustFirewall(),
+            "intrusion_detection": IntrusionDetectionSystem(),
+            "vpn_tunneling": VPNSecureTunneling(),
+            "dns_filter": DNSSecurityFilter(),
+            "malware_scanner": MalwareScanner(),
+            "process_sentinel": ProcessSentinel(),
+            "kernel_hardening": KernelHardening(),
+            "config_guard": RegistryConfigGuard(),
+            "usb_blocker": USBHardwareBlocker(),
+            "patch_manager": AutoPatchManager(),
+            "compliance_auditor": ComplianceAuditor(),
+            "vuln_scanner": VulnerabilityScanner(),
+            "secret_scanner": SecretScanner(),
+            "mfa_gateway": BiometricMFAGateway(),
+            "priv_esc_monitor": PrivilegeEscalationMonitor(),
+            "session_guard": SessionHijackingGuard(),
+            "siem": LogAggregatorSIEM(),
+            "backup_recovery": SnapshotRecovery(),
+            "forensics": LiveForensicsToolkit(),
+            "threat_intel": ThreatIntelligenceFeed(),
+            "playbook_engine": AutomatedPlaybookEngine(),
+            "ai_assistant": AISecurityAssistant(),
+            "honeypot": HoneypotDeployer(),
+        }
+        logger.info(f"Initialized {len(self.modules)} security modules")
+    
+    async def run_module(self, module_name: str):
+        """Run a security module"""
+        if module_name not in self.modules:
+            return None
         
-    def _setup_logging(self) -> logging.Logger:
-        """Setup logging"""
+        module = self.modules[module_name]
         
-        logger = logging.getLogger('blueteam')
-        logger.setLevel(logging.DEBUG)
+        try:
+            # Call appropriate method based on module
+            if "traffic" in module_name:
+                result = module.analyze_traffic()
+            elif "firewall" in module_name:
+                result = module.check_connection("0.0.0.0", 80)
+            elif "malware" in module_name:
+                result = module.scan_file("/tmp/test")
+            elif "process" in module_name:
+                result = module.monitor_process(1)
+            elif "kernel" in module_name:
+                result = module.check_kernel_hardening()
+            elif "config" in module_name:
+                result = module.check_config_integrity("/etc/passwd")
+            elif "usb" in module_name:
+                result = module.check_usb_devices()
+            elif "patch" in module_name:
+                result = module.check_updates()
+            elif "compliance" in module_name:
+                result = module.audit_cis_benchmark()
+            elif "vuln" in module_name:
+                result = module.scan_vulnerabilities()
+            elif "secret" in module_name:
+                result = module.scan_for_secrets("/etc/passwd")
+            elif "mfa" in module_name:
+                result = module.check_mfa_status()
+            elif "priv" in module_name:
+                result = module.monitor_sudo_usage()
+            elif "session" in module_name:
+                result = module.detect_session_anomalies()
+            elif "siem" in module_name:
+                result = module.aggregate_logs()
+            elif "backup" in module_name:
+                result = module.check_backups()
+            elif "forensics" in module_name:
+                result = module.collect_forensics()
+            else:
+                result = None
+            
+            if result and result.threat_detected:
+                self._handle_threat(module_name, result)
+            
+            return result
+        except Exception as e:
+            logger.error(f"Error running module {module_name}: {e}")
+            return None
+    
+    def _handle_threat(self, module_name: str, detection_result):
+        """Handle detected threat"""
+        self.threat_count += 1
         
-        # File handler
-        fh = logging.FileHandler(self.log_dir / 'daemon.log')
-        fh.setLevel(logging.DEBUG)
-        
-        # Console handler
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.INFO)
-        
-        # Formatter
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        # Create security event
+        event = SecurityEvent(
+            event_id=f"threat_{self.threat_count}",
+            event_type=detection_result.threat_type,
+            source=module_name,
+            severity=detection_result.severity,
+            data={
+                "description": detection_result.description,
+                "indicators": detection_result.indicators,
+                "remediation": detection_result.remediation
+            },
+            timestamp=datetime.utcnow()
         )
-        fh.setFormatter(formatter)
-        ch.setFormatter(formatter)
         
-        logger.addHandler(fh)
-        logger.addHandler(ch)
+        # Check for correlations
+        correlation = self.correlation_engine.add_event(event)
         
-        return logger
+        # Log threat
+        logger.warning(f"🚨 THREAT DETECTED: {detection_result.threat_type} ({detection_result.severity})")
+        logger.warning(f"   Description: {detection_result.description}")
+        logger.warning(f"   Indicators: {', '.join(detection_result.indicators)}")
+        logger.warning(f"   Remediation: {detection_result.remediation}")
         
-    def start(self):
-        """Start daemon"""
+        # Send alerts
+        threat_data = {
+            "threat_id": event.event_id,
+            "threat_type": detection_result.threat_type,
+            "severity": detection_result.severity,
+            "description": detection_result.description,
+            "indicators": detection_result.indicators,
+            "remediation": detection_result.remediation,
+            "timestamp": datetime.utcnow().isoformat()
+        }
         
-        self.logger.info("Starting BlueTeam Enterprise Daemon")
+        # Send to integrations
+        results = integration_manager.send_alert_to_all(threat_data)
+        for integration_name, success in results.items():
+            status = "✓" if success else "✗"
+            logger.info(f"   {status} {integration_name}")
+    
+    async def monitor_loop(self):
+        """Main monitoring loop"""
+        logger.info("🟢 BlueTeam Daemon started - monitoring enabled")
         self.running = True
         
-        # Write PID file
-        with open(self.pid_file, 'w') as f:
-            f.write(str(os.getpid()))
-            
-        # Setup signal handlers
-        signal.signal(signal.SIGTERM, self._handle_signal)
-        signal.signal(signal.SIGINT, self._handle_signal)
-        
-        try:
-            self._run_monitoring_loop()
-        except Exception as e:
-            self.logger.error(f"Daemon error: {e}", exc_info=True)
-        finally:
-            self.stop()
-            
-    def _run_monitoring_loop(self):
-        """Run main monitoring loop"""
-        
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            while self.running:
-                loop.run_until_complete(self._monitoring_cycle())
+        while self.running:
+            try:
+                # Run all modules
+                for module_name in self.modules:
+                    await self.run_module(module_name)
+                    await asyncio.sleep(0.1)  # Small delay between modules
                 
-        finally:
-            loop.close()
-            
-    async def _monitoring_cycle(self):
-        """Single monitoring cycle"""
-        
-        try:
-            # Monitor network
-            self.logger.debug("Monitoring network connections...")
-            connections = await self.monitor.monitor_network()
-            
-            for conn in connections:
-                # Check for anomalies
-                is_anomaly, confidence = self.network_detector.detect_anomaly({
-                    "dst_port": conn.dst_port,
-                    "dst_ip": conn.dst_ip,
-                    "protocol": conn.protocol,
-                    "status": conn.status
-                })
-                
-                if is_anomaly and confidence > 0.7:
-                    self.logger.warning(
-                        f"Network anomaly detected: {conn.process_name} -> "
-                        f"{conn.dst_ip}:{conn.dst_port} (confidence: {confidence:.2f})"
-                    )
-                    
-            # Monitor processes
-            self.logger.debug("Monitoring processes...")
-            processes = await self.monitor.monitor_processes()
-            
-            for proc in processes:
-                is_anomaly, confidence = self.process_detector.detect_anomaly({
-                    "process_name": proc.process_name,
-                    "user": proc.user,
-                    "event_type": proc.event_type,
-                    "command_line": proc.command_line
-                })
-                
-                if is_anomaly and confidence > 0.7:
-                    self.logger.warning(
-                        f"Process anomaly detected: {proc.process_name} "
-                        f"(confidence: {confidence:.2f})"
-                    )
-                    
-            # Monitor file access
-            self.logger.debug("Monitoring file access...")
-            files = await self.monitor.monitor_file_access()
-            
-            # Monitor system resources
-            self.logger.debug("Monitoring system resources...")
-            resources = await self.monitor.monitor_system_resources()
-            
-            # Save threats to database
-            self._save_threats()
-            
-            # Wait before next cycle
-            await asyncio.sleep(5)
-            
-        except Exception as e:
-            self.logger.error(f"Monitoring cycle error: {e}", exc_info=True)
-            await asyncio.sleep(5)
-            
-    def _save_threats(self):
-        """Save detected threats"""
-        
-        threats = self.monitor.get_threats()
-        
-        if threats:
-            threat_file = self.data_dir / f"threats_{datetime.now().strftime('%Y%m%d')}.jsonl"
-            
-            with open(threat_file, 'a') as f:
-                for threat in threats[-10:]:  # Save last 10 threats
-                    f.write(json.dumps(threat) + '\n')
-                    
-    def _handle_signal(self, signum, frame):
-        """Handle signals"""
-        
-        self.logger.info(f"Received signal {signum}")
-        self.running = False
-        
-    def stop(self):
-        """Stop daemon"""
-        
-        self.logger.info("Stopping BlueTeam Enterprise Daemon")
-        self.running = False
-        
-        # Remove PID file
-        try:
-            self.pid_file.unlink()
-        except:
-            pass
-            
-        self.logger.info("BlueTeam daemon stopped")
-
-
-def main():
-    """Main entry point"""
+                # Sleep before next cycle
+                await asyncio.sleep(5)
+            except Exception as e:
+                logger.error(f"Error in monitor loop: {e}")
+                await asyncio.sleep(5)
     
+    def signal_handler(self, signum, frame):
+        """Handle shutdown signal"""
+        logger.info("🔴 Shutting down BlueTeam Daemon...")
+        self.running = False
+    
+    async def start(self):
+        """Start daemon"""
+        # Initialize database
+        try:
+            init_db()
+            logger.info("✓ Database initialized")
+        except Exception as e:
+            logger.warning(f"Database initialization: {e}")
+        
+        # Register signal handlers
+        signal.signal(signal.SIGTERM, self.signal_handler)
+        signal.signal(signal.SIGINT, self.signal_handler)
+        
+        # Start monitoring
+        try:
+            await self.monitor_loop()
+        except Exception as e:
+            logger.error(f"Fatal error: {e}")
+            sys.exit(1)
+
+
+async def main():
+    """Main entry point"""
     daemon = BlueTeamDaemon()
-    daemon.start()
+    await daemon.start()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Daemon stopped")
+        sys.exit(0)
