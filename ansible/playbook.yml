@@ -1,0 +1,101 @@
+---
+- hosts: all
+  become: yes
+  
+  vars:
+    blueteam_version: "2.0.0"
+    blueteam_user: "blueteam"
+    blueteam_group: "blueteam"
+    blueteam_home: "/opt/blueteam"
+  
+  tasks:
+    - name: Update system packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+    
+    - name: Install dependencies
+      apt:
+        name:
+          - python3.11
+          - python3-pip
+          - postgresql
+          - redis-server
+          - systemd
+          - curl
+          - wget
+        state: present
+    
+    - name: Create blueteam user
+      user:
+        name: "{{ blueteam_user }}"
+        group: "{{ blueteam_group }}"
+        home: "{{ blueteam_home }}"
+        shell: /bin/bash
+        createhome: yes
+    
+    - name: Clone BlueTeam repository
+      git:
+        repo: 'https://github.com/masterfrequency/blueteam-linux-app.git'
+        dest: "{{ blueteam_home }}"
+        version: main
+      become_user: "{{ blueteam_user }}"
+    
+    - name: Install Python dependencies
+      pip:
+        requirements: "{{ blueteam_home }}/requirements.txt"
+        executable: pip3
+    
+    - name: Create BlueTeam directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ blueteam_user }}"
+        group: "{{ blueteam_group }}"
+        mode: '0755'
+      loop:
+        - /etc/blueteam
+        - /var/log/blueteam
+        - /var/lib/blueteam
+    
+    - name: Copy configuration file
+      copy:
+        src: "{{ blueteam_home }}/etc/blueteam.conf"
+        dest: /etc/blueteam/blueteam.conf
+        owner: "{{ blueteam_user }}"
+        group: "{{ blueteam_group }}"
+        mode: '0600'
+    
+    - name: Copy systemd service file
+      copy:
+        src: "{{ blueteam_home }}/systemd/blueteam.service"
+        dest: /etc/systemd/system/blueteam.service
+        mode: '0644'
+    
+    - name: Enable and start BlueTeam service
+      systemd:
+        name: blueteam
+        enabled: yes
+        state: started
+        daemon_reload: yes
+    
+    - name: Enable and start PostgreSQL
+      systemd:
+        name: postgresql
+        enabled: yes
+        state: started
+    
+    - name: Enable and start Redis
+      systemd:
+        name: redis-server
+        enabled: yes
+        state: started
+    
+    - name: Verify BlueTeam is running
+      systemd:
+        name: blueteam
+      register: blueteam_status
+    
+    - name: Display BlueTeam status
+      debug:
+        msg: "BlueTeam status: {{ blueteam_status.status.ActiveState }}"
