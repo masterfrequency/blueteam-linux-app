@@ -1,0 +1,33 @@
+#!/bin/bash
+# Pre-installation script for BlueTeam
+
+set -e
+
+echo "🔵 BlueTeam - Pre-installation"
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then
+   echo "❌ This script must be run as root"
+   exit 1
+fi
+
+# Create blueteam user if it doesn't exist
+if ! id -u blueteam > /dev/null 2>&1; then
+    echo "📝 Creating blueteam user..."
+    useradd -r -s /usr/sbin/nologin -d /var/lib/blueteam -m blueteam || true
+fi
+
+# Create necessary directories
+echo "📁 Creating directories..."
+mkdir -p /etc/blueteam
+mkdir -p /var/lib/blueteam
+mkdir -p /var/log/blueteam
+mkdir -p /var/run/blueteam
+
+# Set permissions
+chown -R blueteam:blueteam /var/lib/blueteam
+chown -R blueteam:blueteam /var/log/blueteam
+chmod 755 /var/lib/blueteam
+chmod 755 /var/log/blueteam
+
+echo "✅ Pre-installation complete"

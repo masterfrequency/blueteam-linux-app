@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+"""
+BlueTeam Linux Enterprise - CLI Tool
+Command-line interface for security monitoring and management
+"""
+
+import sys
+import os
+import json
+import subprocess
+from pathlib import Path
+from datetime import datetime, timedelta
+from typing import Optional
+import argparse
+
+# Add lib to path
+sys.path.insert(0, '/usr/lib/blueteam')
+
+
+class BlueTeamCLI:
+    """BlueTeam CLI Interface"""
+    
+    def __init__(self):
+        self.config_dir = Path("/etc/blueteam")
+        self.log_dir = Path("/var/log/blueteam")
+        self.data_dir = Path("/var/lib/blueteam")
+        self.pid_file = Path("/var/run/blueteam.pid")
+        
+    def status(self, args):
+        """Show daemon status"""
+        
+        print("\n" + "="*80)
+        print("🔵 BlueTeam Linux Enterprise - System Status")
+        print("="*80 + "\n")
+        
+        # Check if daemon is running
+        if self.pid_file.exists():
+            with open(self.pid_file) as f:
+                pid = f.read().strip()
+            
+            try:
+                result = subprocess.run(['ps', '-p', pid], capture_output=True)
+                if result.returncode == 0:
+                    print("✅ Daemon Status: RUNNING (PID: {})".format(pid))
+                else:
+                    print("❌ Daemon Status: NOT RUNNING (stale PID file)")
+            except:
+                print("❌ Daemon Status: UNKNOWN")
+        else:
+            print("❌ Daemon Status: NOT RUNNING")
+            
+        # Show recent threats
+        print("\n" + "-"*80)
+        print("🚨 Recent Threats (Last 24 Hours)")
+        print("-"*80 + "\n")
+        
+        threat_files = sorted(self.data_dir.glob("threats_*.jsonl"), reverse=True)
+        
+        if threat_files:
+            threat_count = 0
+            for threat_file in threat_files[:1]:  # Last file
+                with open(threat_file) as f:
+                    for line in f:
+                        if threat_count >= 10:
+                            break
+                        threat = json.loads(line)
+                        level_icon = self._get_level_icon(threat.get("severity", "info"))
+                        print(f"{level_icon} [{threat.get('threat_type')}]")
+                        print(f"   Description: {threat.get('description')}")
+                        print(f"   Time: {threat.get('timestamp')}")
+                        print()
+                        threat_count += 1
+        else:
+            print("✅ No threats detected\n")
+            
+        print("="*80 + "\n")
+        
+    def start(self, args):
+        """Start daemon"""
+        
+        print("🚀 Starting BlueTeam daemon...")
+        
+        try:
+            result = subprocess.run(
+                ['sudo', 'systemctl', 'start', 'blueteam'],
+                capture_output=True,
+                text=True
+            )
+            
+            if result.returncode == 0:
+                print("✅ BlueTeam daemon started successfully")
+            else:
+                print(f"❌ Failed to start daemon: {result.stderr}")
+                
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            
+    def stop(self, args):
+        """Stop daemon"""
+        
+        print("⏹️  Stopping BlueTeam daemon...")
+        
+        try:
+            result = subprocess.run(
+                ['sudo', 'systemctl', 'stop', 'blueteam'],
+                capture_output=True,
+                text=True
+            )
+            
+            if result.returncode == 0:
+                print("✅ BlueTeam daemon stopped")
+            else:
+                print(f"❌ Failed to stop daemon: {result.stderr}")
+                
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            
+    def logs(self, args):
+        """Show daemon logs"""
+        
+        log_file = self.log_dir / 'daemon.log'
+        
+        if not log_file.exists():
+            print("❌ No logs found")
+            return
+            
+        lines = args.lines or 50
+        
+        print(f"\n📋 BlueTeam Daemon Logs (Last {lines} lines)\n")
+        
+        with open(log_file) as f:
+            all_lines = f.readlines()
+            for line in all_lines[-lines:]:
+                print(line.rstrip())
+                
+    def threats(self, args):
+        """Show detected threats"""
+        
+        print("\n" + "="*80)
+        print("🚨 BlueTeam - Detected Threats")
+        print("="*80 + "\n")
+        
+        threat_files = sorted(self.data_dir.glob("threats_*.jsonl"), reverse=True)
+        
+        threat_count = 0
+        for threat_file in threat_files:
+            with open(threat_file) as f:
+                for line in f:
+                    if args.limit and threat_count >= args.limit:
+                        break
+                    threat = json.loads(line)
+                    level_icon = self._get_level_icon(threat.get("severity", "info"))
+                    print(f"{level_icon} [{threat.get('threat_type')}]")
+                    print(f"   Description: {threat.get('description')}")
+                    print(f"   Severity: {threat.get('severity')}")
+                    print(f"   Time: {threat.get('timestamp')}")
+                    if threat.get('source_process'):
+                        print(f"   Process: {threat.get('source_process')}")
+                    print()
+                    threat_count += 1
+                    
+            if args.limit and threat_count >= args.limit:
+                break
+                
+        if threat_count == 0:
+            print("✅ No threats detected\n")
+            
+        print("="*80 + "\n")
+        
+    def config(self, args):
+        """Manage configuration"""
+        
+        config_file = self.config_dir / 'blueteam.conf'
+        
+        if args.action == 'show':
+            if config_file.exists():
+                with open(config_file) as f:
+                    print(f.read())
+            else:
+                print("❌ Configuration file not found")
+                
+        elif args.action == 'edit':
+            print("✏️  Edit configuration file:")
+            print(f"   {config_file}")
+            subprocess.run(['sudo', 'nano', str(config_file)])
+            
+    def version(self, args):
+        """Show version"""
+        print("BlueTeam Linux Enterprise v2.0.0")
+        
+    def _get_level_icon(self, level: str) -> str:
+        """Get icon for threat level"""
+        icons = {
+            "critical": "🔴",
+            "high": "🟠",
+            "medium": "🟡",
+            "low": "🟢",
+            "info": "🔵",
+        }
+        return icons.get(level.lower(), "⚪")
+
+
+def main():
+    """Main entry point"""
+    
+    parser = argparse.ArgumentParser(
+        description='BlueTeam Linux Enterprise - Security Monitoring',
+        prog='blueteam'
+    )
+    
+    subparsers = parser.add_subparsers(dest='command', help='Commands')
+    
+    # Status command
+    subparsers.add_parser('status', help='Show daemon status')
+    
+    # Start command
+    subparsers.add_parser('start', help='Start daemon')
+    
+    # Stop command
+    subparsers.add_parser('stop', help='Stop daemon')
+    
+    # Logs command
+    logs_parser = subparsers.add_parser('logs', help='Show daemon logs')
+    logs_parser.add_argument('-n', '--lines', type=int, help='Number of lines to show')
+    
+    # Threats command
+    threats_parser = subparsers.add_parser('threats', help='Show detected threats')
+    threats_parser.add_argument('-l', '--limit', type=int, help='Limit number of threats')
+    
+    # Config command
+    config_parser = subparsers.add_parser('config', help='Manage configuration')
+    config_parser.add_argument(
+        'action',
+        choices=['show', 'edit'],
+        help='Configuration action'
+    )
+    
+    # Version command
+    subparsers.add_parser('version', help='Show version')
+    
+    args = parser.parse_args()
+    
+    cli = BlueTeamCLI()
+    
+    if args.command == 'status':
+        cli.status(args)
+    elif args.command == 'start':
+        cli.start(args)
+    elif args.command == 'stop':
+        cli.stop(args)
+    elif args.command == 'logs':
+        cli.logs(args)
+    elif args.command == 'threats':
+        cli.threats(args)
+    elif args.command == 'config':
+        cli.config(args)
+    elif args.command == 'version':
+        cli.version(args)
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()

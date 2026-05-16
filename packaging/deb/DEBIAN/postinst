@@ -1,0 +1,41 @@
+#!/bin/bash
+# Post-installation script for BlueTeam
+
+set -e
+
+echo "🔵 BlueTeam - Post-installation"
+
+# Install Python dependencies
+echo "📦 Installing Python dependencies..."
+pip3 install -q -r /usr/lib/blueteam/requirements.txt || true
+
+# Enable and start service
+echo "🚀 Enabling BlueTeam service..."
+systemctl daemon-reload
+systemctl enable blueteam || true
+
+# Create symbolic links
+ln -sf /usr/lib/blueteam/bin/blueteam /usr/local/bin/blueteam || true
+ln -sf /usr/lib/blueteam/bin/blueteam-daemon /usr/bin/blueteam-daemon || true
+
+# Set permissions
+chmod 755 /usr/bin/blueteam-daemon
+chmod 755 /usr/local/bin/blueteam
+
+# Initialize database
+echo "💾 Initializing database..."
+mkdir -p /var/lib/blueteam
+chown blueteam:blueteam /var/lib/blueteam
+
+# Display information
+echo ""
+echo "✅ BlueTeam installation complete!"
+echo ""
+echo "📋 Next steps:"
+echo "  1. Review configuration: sudo nano /etc/blueteam/blueteam.conf"
+echo "  2. Start the service: sudo systemctl start blueteam"
+echo "  3. Check status: blueteam status"
+echo "  4. View logs: blueteam logs"
+echo ""
+echo "📚 For help: blueteam --help"
+echo ""

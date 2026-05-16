@@ -1,0 +1,31 @@
+Package: blueteam
+Version: 2.0.0-1
+Architecture: amd64
+Maintainer: BlueTeam Security <security@blueteam.dev>
+Homepage: https://github.com/masterfrequency/blueteam-linux-app
+Description: BlueTeam Linux Enterprise - Advanced Security Monitoring Platform
+ BlueTeam is an enterprise-grade security monitoring and threat detection platform
+ for Linux systems. It provides real-time system monitoring, ML-based threat
+ detection, and automated incident response capabilities.
+ .
+ Features:
+  - Real-time network monitoring with anomaly detection
+  - Process monitoring and behavioral analysis
+  - File integrity monitoring
+  - ML-based threat classification
+  - Automated incident response
+  - Compliance auditing
+  - Comprehensive logging and reporting
+ .
+ 23 integrated security modules across 6 security domains:
+  - Network Defense
+  - Endpoint Security
+  - Vulnerability Management
+  - Identity & Access Control
+  - Incident Response
+  - Advanced AI Threat Detection
+Depends: python3 (>= 3.8), python3-pip, systemd
+Recommends: auditd, fail2ban
+Suggests: postgresql, elasticsearch
+Priority: optional
+Section: admin
